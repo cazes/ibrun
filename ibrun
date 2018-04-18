@@ -75,26 +75,6 @@ function usage {
 #------------------------------------------------
 
 #------------------------------------------------
-function load_defaults {
-# 02/09/15 - Allow a different ibrun.defaults file for testing
-    if [ -z "$IBRUN_DEFAULTS" ];then
-       #export IBRUN_DEFAULTS=/usr/local/bin/ibrun.defaults
-       #Look in the directory containing ibrun
-       IBRUN_DIR=`dirname $0`
-       if [ -s $IBRUN_DIR/ibrun.defaults ];then
-          export IBRUN_DEFAULTS=$IBRUN_DIR/ibrun.defaults
-       elif [ -s /usr/local/bin/ibrun.defaults ];then
-          export IBRUN_DEFAULTS=/usr/local/bin/ibrun.defaults
-       else
-          std_print " Warning ->  Unable to set defaults for ibrun"  
-       fi
-    fi
-
-    if [ -s $IBRUN_DEFAULTS ];then
-	. $IBRUN_DEFAULTS
-    fi
-}
-
 
 # Figure out which system we are on.
 nlocal=$(hostname -f)
@@ -156,11 +136,6 @@ if [ "$1" == "-h" -o "$1" == "--help" -o "$1" == "-help" -o "$#" -eq 0 ]; then
     usage
     exit 0
 fi
-
-#-----------------------
-# Load runtime defaults
-#-----------------------
-load_defaults
 
 pe_startTime=`date +%s`
 
