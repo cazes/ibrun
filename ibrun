@@ -1,7 +1,7 @@
 #!/bin/bash
 # -*-sh-*-
 # ---------------------------------------------------------------------
-# Version 1.8
+# Version 1.9 pack jobs
 # ---------------------------------------------------------------------
 
 function debug_print {
@@ -78,21 +78,7 @@ function usage {
 
 # Figure out which system we are on.
 nlocal=$(hostname -f)
-nA=($(builtin echo "$nlocal" | tr '.' ' '))
-first=${nA[0]}
-SYSHOST=${nA[1]}
 
-fqdn="$SYSHOST.tacc.utexas.edu"
-## CPN_stampede=16
-## CPN_stampede2=68
-## CPN_ls4=12
-## CPN_ls5=24
-## CPN_longhorn=8
-## CPN_hikari=24
-## CPN_maverick=20
-## CPN_wrangler=24
-## 
-## eval "CPN=\$CPN_$SYSHOST"
 #Get the hardware specifics from lscpu
 spn=`lscpu | egrep 'Socket\(s\):' | awk '{print $2}'`
 npn=`lscpu | egrep 'NUMA node\(s\):' | awk '{print $3}'`
@@ -157,6 +143,10 @@ if [ "$SCHEDULER" == "SGE" ];then
     debug_print "$SCHEDULER : ppn = ${pe_ppn} "
 
 elif [ "$SCHEDULER" == "SLURM" ];then
+    BATCH_JOB_ID=$SLURM_JOB_ID
+    NSLOTS_BATCH=$SLURM_NPROCS
+    SLMIBRUN_TASKS_PER_NODE=$SLURM_TASKS_PER_NODE
+    SLMIBRUN_NODELIST=$SLURM_NODELIST
 
     #Handle pack jobs that span partitions
     if [ ${SLURM_PACK_SIZE-0} -gt 1 ] ; then
@@ -189,10 +179,10 @@ elif [ "$SCHEDULER" == "SLURM" ];then
            comma_sep=","
        done
 
-    fi
 
-    BATCH_JOB_ID=$SLMIBRUN_JOB_ID
-    NSLOTS_BATCH=$SLMIBRUN_NPROCS
+       BATCH_JOB_ID=$SLMIBRUN_JOB_ID
+       NSLOTS_BATCH=$SLMIBRUN_NPROCS
+    fi
 
     #Check to see if we're overriding SLURM
     if [ ${TACC_TASKS_PER_NODE-0} -gt 0 ]; then
@@ -333,11 +323,6 @@ if [ x"$MODE" == "xmvapich2_slurm" -o x"$MODE" == "xmvapich2_ssh" -o x"$MODE" ==
         ((host_id++))
       done
     done
-
-    # Default IB settings for MVAPICH2
-
-    # Temporary settings to cooperate with MIC environment (ks 7/31/12)
-
 
 elif [ x"$MODE" == "ximpi_hydra" ]; then
 
@@ -515,7 +500,7 @@ do
 #
 	*)
       ## Default case
-      # echo "Reached default case, we assume this is the executable..."
+      # Reached default case, we assume this is the executable...
 	    cmd=$1
 	    shift
             debug_print "cmd = $cmd"
@@ -527,13 +512,8 @@ done
 ## Do some error checking of the user's arguments to ibrun.
 res=0
 
-## If -n is set, must also set -o, and vice-versa.  This way we don't
-## have to worry about cases where one is set and the other is not.
-#
 # Is -n set and -o not set?
 if [ x"$ibrun_n_option" != "x" -a x"$ibrun_o_option" == "x" ]; then
-#    echo "ERROR: The -n option to ibrun was set but -o was not."
-#    res=1
   #Assume -n is the same a -np and set -o to 0.
     ibrun_o_option=0
     res=0
@@ -660,28 +640,28 @@ if [ x"$ibrun_n_option" != "x" ]; then
     # Cut the subset of hosts from the orig hostfile and put them in the subhostfile.
 	cat $hostfile_tacc | tail -n $(( $MY_NSLOTS - $ibrun_o_option )) | head -n $ibrun_n_option > $subhostfile_tacc
 
-#   # Handle slurm mpi starter
-#     elif [ x"$MODE" == "xcray_slurm" -o x"$MODE" == "xmvapich2_slurm" ]; then
-#     # Create a temporary file for the subset of hosts which we will run on.
-# 	subhostfile_tacc=`mktemp $local_batch_dir/job.$BATCH_JOB_ID.subhostlist.XXXXXXXX`
-# 
-#     #Calculate the starting node and ending node
-# 	s_node=$(( $ibrun_o_option/$pe_ppn ))
-# 	e_node=$(( ($ibrun_o_option+$ibrun_n_option)/$pe_ppn ))
-# 	m_nodes=$(( $e_node - $s_node - 1 ))
-# 
-#     #Calculate the # of tasks on starting node and ending node
-# 	s_tasks=$(( $pe_ppn - ($ibrun_o_option - ($s_node*$pe_ppn)) ))
-# 	e_tasks=$(( $ibrun_o_option + $ibrun_n_option - ($e_node*$pe_ppn) ))
-#     # Cut the subset of hosts from the orig hostfile and put them in the subhostfile.
-# 
-#     #Handle the first node
-# 	cat $hostfile_tacc | head -n $(( $s_node + 1 )) | tail -1 | sed -e"s/\*[0-9]\+$/*${s_tasks}/" >  $subhostfile_tacc
-#     #Handle the in between nodes
-# 	cat $hostfile_tacc | head -n $e_node   | tail -n $m_nodes  >>  $subhostfile_tacc
-#     #Handle the last node
-# 	cat $hostfile_tacc | head -n $(( $e_node + 1 )) | tail -1 | sed -e"s/\*[0-9]\+$/*${e_tasks}/" >> $subhostfile_tacc
-# 
+  # Handle slurm mpi starter
+    elif [ x"$MODE" == "xcray_slurm" -o x"$MODE" == "xmvapich2_slurm" ]; then
+    # Create a temporary file for the subset of hosts which we will run on.
+	subhostfile_tacc=`mktemp $local_batch_dir/job.$BATCH_JOB_ID.subhostlist.XXXXXXXX`
+
+    #Calculate the starting node and ending node
+	s_node=$(( $ibrun_o_option/$pe_ppn ))
+	e_node=$(( ($ibrun_o_option+$ibrun_n_option)/$pe_ppn ))
+	m_nodes=$(( $e_node - $s_node - 1 ))
+
+    #Calculate the # of tasks on starting node and ending node
+	s_tasks=$(( $pe_ppn - ($ibrun_o_option - ($s_node*$pe_ppn)) ))
+	e_tasks=$(( $ibrun_o_option + $ibrun_n_option - ($e_node*$pe_ppn) ))
+    # Cut the subset of hosts from the orig hostfile and put them in the subhostfile.
+
+    #Handle the first node
+	cat $hostfile_tacc | head -n $(( $s_node + 1 )) | tail -1 | sed -e"s/\*[0-9]\+$/*${s_tasks}/" >  $subhostfile_tacc
+    #Handle the in between nodes
+	cat $hostfile_tacc | head -n $e_node   | tail -n $m_nodes  >>  $subhostfile_tacc
+    #Handle the last node
+	cat $hostfile_tacc | head -n $(( $e_node + 1 )) | tail -1 | sed -e"s/\*[0-9]\+$/*${e_tasks}/" >> $subhostfile_tacc
+
   # Handle openmpi mpi starter
     elif [ x"$MODE" == "xopenmpi_ssh" -o x"$MODE" == "xopenmpi_1.3_ssh" ]; then
     # Create a temporary file for the subset of hosts which we will run on.
@@ -740,6 +720,8 @@ elif [ x"$MODE" == "xmvapich2_ssh" ]; then
      if [ "x${MV2_CPU_BINDING_POLICY}" == "xhybrid" ]; then
        export MV2_HYBRID_BINDING_POLICY=spread
      fi
+     debug_print "$MODE MV2_CPU_BINDING_POLICY    : $MV2_CPU_BINDING_POLICY "
+     debug_print "$MODE MV2_HYBRID_BINDING_POLICY : $MV2_HYBRID_BINDING_POLICY "
 
 #If more threads of execution  than physical cores
 #  use hyperthreads rather than physical cores
@@ -789,8 +771,11 @@ elif [ x"$MODE" == "xopenmpi_ssh" -o  x"$MODE" == "xopenmpi_1.3_ssh" ]; then
     #Ensure that OpenMPI uses mlx5 and does not look for or complain about scif0
     export OMPI_MCA_btl_openib_if_include=mlx5_0:1
 
+    #OMPI timeout
+    OMPI_TIME_OUT=23
+
     #Other OpenMPI options needed for IB
-    TACC_OPENMPI_OPTIONS=" --mca btl sm,openib,self --mca btl_openib_ib_timeout $MV2_DEFAULT_TIME_OUT --mca oob_tcp_if_include ib0 --mca btl_openib_use_srq 1 --mca btl_openib_use_rd_max $srq_size " 
+    TACC_OPENMPI_OPTIONS=" --mca btl sm,openib,self --mca btl_openib_ib_timeout $OMPI_TIME_OUT --mca oob_tcp_if_include ib0 --mca btl_openib_use_srq 1 --mca btl_openib_use_rd_max $srq_size " 
 
     #Finally!  We're ready to run
     launch_command="mpirun -np $MY_NSLOTS -hostfile $hostfile_tacc $TACC_OPENMPI_ENV $TACC_OPENMPI_OPTIONS $MY_OPENMPI_OPTIONS  $fullcmd $@"
