@@ -142,8 +142,8 @@ NUMCORES=$((CPN*2))
 if [[ $nlocal =~ "login"* ]]
 then
    usage
-   echo "ERROR: Do not run $0 on the login node!"
-   echo "       It must be run on a compute node."
+   err_print "Do not run $0 on the login node!"
+   err_print "It must be run on a compute node."
    exit 1
 fi
 
@@ -537,7 +537,7 @@ fi
 
 # Or, is -n unset while -o is?
 if [ x"$ibrun_n_option" == "x" -a x"$ibrun_o_option" != "x" ]; then
-    echo "ERROR: The -o option to ibrun was set but -n was not."
+    err_print "The -o option to ibrun was set but -n was not."
     res=1
 fi
 
@@ -552,13 +552,13 @@ fi
 if [ x"$ibrun_n_option" != "x" ]; then
     echo $ibrun_n_option | grep "[^0-9]" > /dev/null 2>&1
     if [ "$?" -eq "0" ]; then
-	echo "ERROR: Non-numeric argument passed for -n."
+	err_print "Non-numeric argument passed for -n."
 	res=1
     fi
     
     echo $ibrun_o_option | grep "[^0-9]" > /dev/null 2>&1
     if [ "$?" -eq "0" ]; then
-	echo "ERROR: Non-numeric argument passed for -o."
+	err_print "Non-numeric argument passed for -o."
 	res=1
     fi
 fi
@@ -573,13 +573,13 @@ fi
 if [ x"$ibrun_n_option" != "x" ]; then
     ## Double check user's -n value: it can't be larger than MY_NSLOTS
     if [ $ibrun_n_option -gt $MY_NSLOTS ]; then
-	echo "ERROR: -n option requested $ibrun_n_option hosts, only $MY_NSLOTS are available!"
+	err_print " -n option requested $ibrun_n_option hosts, only $MY_NSLOTS are available!"
 	res=1
     fi
     
     ## Double check user's -o value: it can't be larger than MY_NSLOTS
     if [ $ibrun_o_option -gt $MY_NSLOTS ]; then
-	echo "ERROR: -o option requested $ibrun_o_option offset, only $MY_NSLOTS are available!"
+	err_print " -o option requested $ibrun_o_option offset, only $MY_NSLOTS are available!"
 	res=1
     fi
 
@@ -587,13 +587,13 @@ if [ x"$ibrun_n_option" != "x" ]; then
     ## put us over the total number of hosts.  (Don't allow wrap-around.)
     slots_max=$(( $ibrun_o_option + $ibrun_n_option ))
     if [ $slots_max -gt $MY_NSLOTS ]; then
-	echo "ERROR: Number of hosts (requested through -n) plus offset (via -o) exceeds the total number of slots available."
+	err_print "Number of hosts (requested through -n) plus offset (via -o) exceeds the total number of slots available."
 	res=1
     fi
 
     ## Offset of zero (-o 0) is OK but requesting 0 hosts (-n 0) doesn't really make sense...
     if [ $ibrun_n_option -eq 0 ]; then
-	echo "ERROR: Requesting zero hosts (-n 0) is not allowed."
+	err_print "Requesting zero hosts (-n 0) is not allowed."
 	res=1
     fi
 fi
