@@ -3,6 +3,7 @@
 # ---------------------------------------------------------------------
 # Version 1.8
 # ---------------------------------------------------------------------
+#set -x
 
 function debug_print {
 
@@ -74,26 +75,6 @@ function usage {
 }
 #------------------------------------------------
 
-#------------------------------------------------
-function load_defaults {
-# 02/09/15 - Allow a different ibrun.defaults file for testing
-    if [ -z "$IBRUN_DEFAULTS" ];then
-       #export IBRUN_DEFAULTS=/usr/local/bin/ibrun.defaults
-       #Look in the directory containing ibrun
-       IBRUN_DIR=`dirname $0`
-       if [ -s $IBRUN_DIR/ibrun.defaults ];then
-          export IBRUN_DEFAULTS=$IBRUN_DIR/ibrun.defaults
-       elif [ -s /usr/local/bin/ibrun.defaults ];then
-          export IBRUN_DEFAULTS=/usr/local/bin/ibrun.defaults
-       else
-          std_print " Warning ->  Unable to set defaults for ibrun"  
-       fi
-    fi
-
-    if [ -s $IBRUN_DEFAULTS ];then
-	. $IBRUN_DEFAULTS
-    fi
-}
 
 
 # Figure out which system we are on.
@@ -157,16 +138,11 @@ if [ "$1" == "-h" -o "$1" == "--help" -o "$1" == "-help" -o "$#" -eq 0 ]; then
     exit 0
 fi
 
-#-----------------------
-# Load runtime defaults
-#-----------------------
-load_defaults
-
 pe_startTime=`date +%s`
 
 # Get the PE hostfile, number of slots and wayness from the environment
 
-SCHEDULER=SLURM
+#SCHEDULER=SLURM
 
 if [ "$SCHEDULER" == "SGE" ];then
     pe_hostfile=$PE_HOSTFILE
@@ -184,6 +160,9 @@ if [ "$SCHEDULER" == "SGE" ];then
 elif [ "$SCHEDULER" == "SLURM" ];then
     BATCH_JOB_ID=$SLURM_JOB_ID
     NSLOTS_BATCH=$SLURM_NPROCS
+
+    #First build the hostlist
+    declare -a hostlist=(`scontrol show hostname $SLURM_NODELIST `) 
 
     #Check to see if we're overriding SLURM
     if [ ${TACC_TASKS_PER_NODE-0} -gt 0 ]; then
@@ -235,8 +214,24 @@ elif [ "$SCHEDULER" == "SLURM" ];then
     fi
     debug_print "$SCHEDULER : NODE_TASKS_PPN_INFO = $NODE_TASKS_PPN_INFO"
 else
-    echo "ERROR: Unknown batch system"
-    exit 1
+    #Check to see if we've set our own limits, IBRUN_TASKS_PER_NODE and MY_NSLOTS
+    if [ ${IBRUN_TASKS_PER_NODE-0} -gt 0 ] && [ ${IBRUN_NUM_NODES-0} -gt 0 ] && [ -n $IBRUN_HOSTFILE ]; then
+       num_hosts=$IBRUN_NUM_NODES
+       node_count=$IBRUN_NUM_NODES
+       TACC_MY_NSLOTS=$(( IBRUN_TASKS_PER_NODE * num_hosts ))
+       export SLURM_TASKS_PER_NODE="${IBRUN_TASKS_PER_NODE}(x${num_hosts})"
+       #Build the hostlist
+       declare -a hostlist=(` cat $IBRUN_HOSTFILE  `) 
+       declare -a node_clusters=(`echo $SLURM_TASKS_PER_NODE | sed -e's/,/ /g'`)
+       export BATCH_JOB_ID=0000
+    else
+      err_print "Unknown batch system"
+      err_print "Set env vars IBRUN_TASKS_PER_NODE to the number of MPI tasks per node "
+      err_print "             IBRUN_NUM_NODES      to the number nodes                 "
+      err_print "             IBRUN_HOSTFILE       to the file containing the hostlist "
+      err_print "                                  (one unique hostname per line )     "
+      exit 1
+    fi
 fi
 
 std_print "Starting up job $BATCH_JOB_ID"
@@ -293,8 +288,7 @@ if [ x"$MODE" == "xmvapich2_slurm" -o x"$MODE" == "xmvapich2_ssh" -o x"$MODE" ==
 
     #Build hostfile using guidance from SLURM
     #First build the hostlist
-    scontrol show hostname $SLURM_NODELIST > $hostfile_tacc".tmp"
-    declare -a hostlist=(`scontrol show hostname $SLURM_NODELIST `) 
+    #declare -a hostlist=(`scontrol show hostname $SLURM_NODELIST `) 
 
     if [ $? -ne 0  ];then
 	std_err "Error -> slurm host list unavailable"
@@ -339,8 +333,7 @@ elif [ x"$MODE" == "ximpi_hydra" ]; then
 
     #Build hostfile using guidance from SLURM
     #First build the hostlist
-    scontrol show hostname $SLURM_NODELIST > $hostfile_tacc".tmp"
-    declare -a hostlist=(`scontrol show hostname $SLURM_NODELIST `) 
+    #declare -a hostlist=(`scontrol show hostname $SLURM_NODELIST `) 
 
     if [ $? -ne 0  ];then
 	err_print "slurm host list unavailable"
@@ -370,7 +363,6 @@ elif [ x"$MODE" == "ximpi_hydra" ]; then
       done
     done
 
-    rm -f $hostfile_tacc".tmp"
 
   # Build hostfile for OpenMPI
   elif [ x"$MODE" == "xopenmpi_ssh" ]; then
@@ -378,13 +370,12 @@ elif [ x"$MODE" == "ximpi_hydra" ]; then
 
     #Build hostfile using guidance from SLURM
     #First build the hostlist
-    scontrol show hostname $SLURM_NODELIST > $hostfile_tacc".tmp"
-    declare -a hostlist=(`scontrol show hostname $SLURM_NODELIST `) 
+    #declare -a hostlist=(`scontrol show hostname $SLURM_NODELIST `) 
 
-    if [ $? -ne 0  ];then
-	err_print "slurm host list unavailable"
-	exit 1
-    fi
+    #if [ $? -ne 0  ];then
+    #  err_print "slurm host list unavailable"
+    #  exit 1
+    #fi
     debug_print "openmpi_ssh hostlist: ${hostlist[@]} "
 
     #Initialize the hostlist index
@@ -422,8 +413,7 @@ elif [ x"$MODE" == "ximpi_hydra" ]; then
 
     #Build hostfile using guidance from SLURM
     #First build the hostlist
-    scontrol show hostname $SLURM_NODELIST > $hostfile_tacc".tmp"
-    declare -a hostlist=(`scontrol show hostname $SLURM_NODELIST `) 
+    #declare -a hostlist=(`scontrol show hostname $SLURM_NODELIST `) 
     if [ $? -ne 0  ];then
 	err_print "slurm host list unavailable"
 	exit 1
@@ -775,9 +765,9 @@ elif [ x"$MODE" == "xopenmpi_ssh" -o  x"$MODE" == "xopenmpi_1.3_ssh" ]; then
 
     #The environment from build_env.pl needs some processing to get it into the 
     # right form for OpenMPI
-    TACC_OPENMPI_ENV=`build_env.pl | sed -e's/\(\S\S*\)=\S\S* / -x \1/g'` 
+#    TACC_OPENMPI_ENV=`build_env.pl | sed -e's/\(\S\S*\)=\S\S* / -x \1/g'` 
     #Added to handle the fact that TACC_ENVLEN is NOT an environment variable
-    export TACC_ENVLEN=${#TACC_OPENMPI_ENV}
+#    export TACC_ENVLEN=${#TACC_OPENMPI_ENV}
 
     # Set send/receive queue max 
     srq_size=2048
@@ -786,7 +776,7 @@ elif [ x"$MODE" == "xopenmpi_ssh" -o  x"$MODE" == "xopenmpi_1.3_ssh" ]; then
     export OMPI_MCA_btl_openib_if_include=mlx5_0:1
 
     #Other OpenMPI options needed for IB
-    TACC_OPENMPI_OPTIONS=" --mca btl sm,openib,self --mca btl_openib_ib_timeout $MV2_DEFAULT_TIME_OUT --mca oob_tcp_if_include ib0 --mca btl_openib_use_srq 1 --mca btl_openib_use_rd_max $srq_size " 
+    #TACC_OPENMPI_OPTIONS=" --mca btl sm,openib,self --mca btl_openib_ib_timeout $MV2_DEFAULT_TIME_OUT --mca oob_tcp_if_include ib0 --mca btl_openib_use_srq 1 --mca btl_openib_use_rd_max $srq_size " 
 
     #Finally!  We're ready to run
     launch_command="mpirun -np $MY_NSLOTS -hostfile $hostfile_tacc $TACC_OPENMPI_ENV $TACC_OPENMPI_OPTIONS $MY_OPENMPI_OPTIONS  $fullcmd $@"
